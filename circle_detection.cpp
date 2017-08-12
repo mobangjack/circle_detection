@@ -43,6 +43,8 @@ int main(int argc, char **argv) {
 	
 	while (1)
 	{
+	  double t = cv::getTickCount();
+	  
     cap >> bgr_image;
     
     if (bgr_image.empty()) break;
@@ -77,19 +79,91 @@ int main(int argc, char **argv) {
     cv::Mat blur_image;
 	  cv::GaussianBlur(mix_hue_image, blur_image, cv::Size(9, 9), 2, 2);
 
+
 	  // Use the Hough transform to detect circles in the combined threshold image
 	  std::vector<cv::Vec3f> circles;
 	  cv::HoughCircles(blur_image, circles, CV_HOUGH_GRADIENT, 1, blur_image.rows/8, 100, 60, 0, 0);
 
+    //std::cout << "number of circles: " << circles.size() << std::endl;
 	  // Loop over all detected circles and outline them on the original image
-	  // if(circles.size() == 0) std::exit(-1);
-	  for(size_t current_circle = 0; current_circle < circles.size(); ++current_circle) {
-		  cv::Point center(std::round(circles[current_circle][0]), std::round(circles[current_circle][1]));
-		  int radius = std::round(circles[current_circle][2]);
-
+	  for(size_t i = 0; i < circles.size(); i++) {
+		  cv::Point center(std::round(circles[i][0]), std::round(circles[i][1]));
+		  int radius = std::round(circles[i][2]);
 		  cv::circle(orig_image, center, radius, cv::Scalar(0, 255, 0), 5);
 	  }
+	  
+	  // std::cout << "blur image channels: " << blur_image.channels() << std::endl;
+	  
+	  if (circles.size() > 0)
+	  {
+	    // Find the inner circle
+	    cv::Vec3f circle = circles[0];
+	    
+	    // std::cout << circle[0] << ", " << circle[1] << ", " << circle[2] << std::endl;
+	    
+	    float radius = circle[2] - 1; // inner
+	    int count = 0; // count > 0 : inner; count < 0 : outer
+	    for (float theta = 0; theta < 6.28; theta += 0.2)
+	    {
+	      
+	      int col = circle[0] + radius * cos(theta);
+	      int row = circle[1] - radius * sin(theta);
+	      if (col < blur_image.cols && row < blur_image.rows)
+	      {
+	        if (blur_image.at<uchar>(row, col) == 0)
+	        {
+	          count++;
+	        }
+	        else if (blur_image.at<uchar>(row, col) == 255)
+	        {
+	          count--;
+	        }
+	      }
+	    }
+	    
+	    // std::cout << "count: " << count;
+	    
+	    if (count > 0)
+	    {
+	      std::cout << "count: " << count << ", inner" << std::endl;
+	    }
+	    else if (count < 0)
+	    {
+	      std::cout << "count: " << count << ", outer" << std::endl;
+	    }
+	  }
+	  
 
+
+/*    
+    std::vector<std::vector<cv::Point> > contours;
+    std::vector<cv::Vec4i> hierarchy;
+    cv::findContours(blur_image, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    
+    int largest_area = 0;
+    int largest_contour_index = 0;
+    for (int i = 0; i < contours.size(); i++)
+    {
+      double area = contourArea(contours[i]);
+      if (area > largest_area)
+      {
+        largest_area = area;
+        largest_contour_index = i;
+      }
+    }
+    
+    if (contours.size() > 0)
+    {
+      cv::Point2f center;
+      float radius;
+      cv::minEnclosingCircle(contours[largest_contour_index], center, radius);
+      cv::circle(orig_image, center, radius, cv::Scalar(0, 255, 0), 5);
+    }
+*/
+    t = (cv::getTickCount() - t) / cv::getTickFrequency();
+    
+    std::cout << "fps: " << (1/t) << std::endl;
+    
 	  // Show images
 	  cv::namedWindow("HSV image", cv::WINDOW_AUTOSIZE);
 	  cv::imshow("HSV image", hsv_image);
@@ -109,6 +183,8 @@ int main(int argc, char **argv) {
 	  cv::imshow("Blur image", blur_image);
 	  cv::namedWindow("Detected red circles on the input image", cv::WINDOW_AUTOSIZE);
 	  cv::imshow("Detected red circles on the input image", orig_image);
+	  
+	  
 
 	  cv::waitKey(30);
   }
